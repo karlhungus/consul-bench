@@ -4,7 +4,6 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"os"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -86,10 +85,8 @@ func QueryAgent(client *consul.Client, serviceName string, wait time.Duration, a
 func QueryServer(addr string, dc string, serviceName string, wait time.Duration, allowStale bool) queryFn {
 	connPool := &pool.ConnPool{
 		SrcAddr:    nil,
-		LogOutput:  os.Stderr,
 		MaxTime:    time.Hour,
 		MaxStreams: 1000000,
-		ForceTLS:   false,
 	}
 
 	args := structs.ServiceSpecificRequest{
@@ -112,12 +109,12 @@ func QueryServer(addr string, dc string, serviceName string, wait time.Duration,
 	if port == 0 {
 		port = 8300
 	}
-	srvAddr := &net.TCPAddr{net.ParseIP(ip), port, ""}
+	srvAddr := &net.TCPAddr{IP: net.ParseIP(ip), Port: port, Zone: ""}
 
 	return func(index uint64) (uint64, error) {
 		args.QueryOptions.MinQueryIndex = index
 		var resp *structs.IndexedCheckServiceNodes
-		err := connPool.RPC(dc, srvAddr, 3, "Health.ServiceNodes", false, &args, &resp)
+		err := connPool.RPC(dc, "test-1", srvAddr, "Health.ServiceNodes", &args, &resp)
 		if err != nil {
 			return 0, err
 		}
