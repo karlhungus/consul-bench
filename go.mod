@@ -1,4 +1,4 @@
-module github.com/criteo/consul-bench
+module github.com/karlhungus/consul-bench
 
 go 1.20
 
