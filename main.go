@@ -28,6 +28,7 @@ func main() {
 	monitor := flag.Int("monitor", 0, "Consul PID")
 	runtime := flag.Duration("time", 0, "Time to run the benchmark")
 	latepc := flag.Float64("late-ratio", 0, "Ratio of late callers")
+	mesh := flag.Bool("mesh", false, "Register service mesh instances when registering services")
 	flag.Parse()
 
 	if *token == "" {
@@ -45,7 +46,7 @@ func main() {
 	stats := make(chan Stat)
 
 	if *registerInstances > 0 {
-		err := RegisterServices(c, *serviceName, *registerInstances, *flapInterval, *serviceTags, stats)
+		err := RegisterServices(c, *serviceName, *registerInstances, *flapInterval, *serviceTags, *mesh, stats)
 		if err != nil {
 			log.Fatal(err)
 		}
