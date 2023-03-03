@@ -38,7 +38,7 @@ func RegisterServices(client *consul.Client, serviceName string, count int, flap
 
 	checksTTL := flapInterval * 3
 	if checksTTL == 0 {
-		checksTTL = 10 * time.Minute
+		checksTTL = 10 * time.Hour
 	}
 
 	var tags []string
@@ -47,25 +47,26 @@ func RegisterServices(client *consul.Client, serviceName string, count int, flap
 	}
 
 	for instanceID := 0; instanceID < count; instanceID++ {
-		err := client.Agent().ServiceRegister(&consul.AgentServiceRegistration{
-			Name: serviceName,
-			ID:   fmt.Sprintf("%s-%d", serviceName, instanceID),
-			Checks: []*consul.AgentServiceCheck{
-				{
-					CheckID:                        fmt.Sprintf("check-%d", instanceID),
-					TTL:                            checksTTL.String(),
-					Status:                         consul.HealthCritical,
-					DeregisterCriticalServiceAfter: checksTTL.String(),
+		id := fmt.Sprintf("%s-%d", serviceName, instanceID)
+		if !mesh {
+			err := client.Agent().ServiceRegister(&consul.AgentServiceRegistration{
+				Name: serviceName,
+				ID:   id,
+				Checks: []*consul.AgentServiceCheck{
+					{
+						CheckID:                        fmt.Sprintf("check-%d", instanceID),
+						TTL:                            checksTTL.String(),
+						Status:                         consul.HealthCritical,
+						DeregisterCriticalServiceAfter: checksTTL.String(),
+					},
 				},
-			},
-			Tags: tags,
-		})
-		if err != nil {
-			return err
-		}
-
-		if mesh {
-			err = RegisterProxy(client, serviceName, fmt.Sprintf("%s-%d", serviceName, instanceID), tags)
+				Tags: tags,
+			})
+			if err != nil {
+				return err
+			}
+		} else {
+			err := RegisterProxy(client, serviceName, id, instanceID, tags, checksTTL)
 			if err != nil {
 				return err
 			}
@@ -140,22 +141,31 @@ func RegisterServices(client *consul.Client, serviceName string, count int, flap
 	return nil
 }
 
-func RegisterProxy(client *consul.Client, serviceName string, serviceID string, tags []string) error {
+func RegisterProxy(client *consul.Client, serviceName string, serviceID string, id int, tags []string, checksTTL time.Duration) error {
 	registration := &consul.AgentServiceRegistration{
 		Kind:    consul.ServiceKindConnectProxy,
-		Name:    serviceName,
-		ID:      serviceID,
+		Name:    fmt.Sprintf("%s", serviceID),
+		ID:      fmt.Sprintf("%s", serviceID),
 		Address: "127.0.0.1",
-		Port:    123,
+		Port:    9999,
 		Tags:    tags,
-		Checks:  consul.AgentServiceChecks{},
+		Checks: []*consul.AgentServiceCheck{
+			{
+				CheckID:                        fmt.Sprintf("check-%d", id),
+				TTL:                            checksTTL.String(),
+				Status:                         consul.HealthCritical,
+				DeregisterCriticalServiceAfter: checksTTL.String(),
+				SuccessBeforePassing:           1,
+			},
+		},
 	}
 
 	registration.Proxy = &consul.AgentServiceConnectProxyConfig{
-		DestinationServiceName: serviceName,
-		DestinationServiceID:   serviceID,
+		DestinationServiceName: fmt.Sprintf("%s-mesh-proxy", serviceID),
+		DestinationServiceID:   fmt.Sprintf("%s-mesh-proxy", serviceID),
 		LocalServiceAddress:    "127.0.0.1",
-		LocalServicePort:       456,
+		LocalServicePort:       8500,
+		//
 	}
 
 	return client.Agent().ServiceRegisterOpts(registration, consul.ServiceRegisterOpts{ReplaceExistingChecks: true})
